@@ -596,6 +596,8 @@ def play(slug, **kwargs):
                     break
 
     base_url = data['url'].rsplit('/', 1)[0]
+    from ttml2ssa import Ttml2SsaAddon
+    ttml = Ttml2SsaAddon()
     for row in data.get('textTracks', []):
         if 'url' not in row:
             if row['type'].lower() == 'closedcaptions':
@@ -605,26 +607,23 @@ def play(slug, **kwargs):
             else:
                 _type = 'sub'
 
-            #log.debug(' **** url: {}'.format(data['url']))
             row['url'] = '{base_url}/t/sub/{language}_{type}.vtt'.format(base_url=base_url, language=row['language'], type=_type)
             log.debug('Generated subtitle url: {}'.format(row['url']))
 
+            """
             import requests
-            from ttml2ssa import Ttml2SsaAddon
             url = row['url']
             r = requests.get(url, allow_redirects=True)
-            ttml = Ttml2SsaAddon()
             lang = row['language']
+            forced = _type == 'forced'
+            impaired = _type == 'sdh'
             ttml.subtitle_language = lang
             ttml.parse_vtt_from_string(r.content.decode('utf-8'))
             result = ttml.generate_ssa()
-            #log.debug("**** sub: {}".format(result))
-            #filename = "/tmp/{}.srt".format(row['language'])
-            forced = _type == 'forced'
-            impaired = _type == 'sdh'
             filename = '/tmp/{}{}{}.ssa'.format(lang, ' [CC]' if impaired=='true' else '', '.forced' if forced=='true'  else '')
             ttml.write2file(filename)
             row['url'] = filename
+            """
 
         item.subtitles.append({'url': row['url'], 'language': row['language'], 'forced': _type == 'forced', 'impaired': _type == 'sdh'})
 
