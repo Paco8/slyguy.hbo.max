@@ -607,10 +607,10 @@ def play(slug, **kwargs):
             else:
                 _type = 'sub'
 
-            row['url'] = '{base_url}/t/sub/{language}_{type}.vtt'.format(base_url=base_url, language=row['language'], type=_type)
+            row['url'] = '{base_url}/t/sub/{language}_{type}.xml'.format(base_url=base_url, language=row['language'], type=_type)
             log.debug('Generated subtitle url: {}'.format(row['url']))
 
-            """
+            
             import requests
             url = row['url']
             r = requests.get(url, allow_redirects=True)
@@ -618,12 +618,13 @@ def play(slug, **kwargs):
             forced = _type == 'forced'
             impaired = _type == 'sdh'
             ttml.subtitle_language = lang
-            ttml.parse_vtt_from_string(r.content.decode('utf-8'))
+            #ttml.parse_vtt_from_string(r.content.decode('utf-8'))
+            ttml.parse_ttml_from_string(r.content)
             result = ttml.generate_ssa()
             filename = '/tmp/{}{}{}.ssa'.format(lang, ' [CC]' if impaired=='true' else '', '.forced' if forced=='true'  else '')
             ttml.write2file(filename)
             row['url'] = filename
-            """
+            
 
         item.subtitles.append({'url': row['url'], 'language': row['language'], 'forced': _type == 'forced', 'impaired': _type == 'sdh'})
 
