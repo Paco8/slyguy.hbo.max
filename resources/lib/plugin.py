@@ -596,8 +596,20 @@ def play(slug, **kwargs):
                     break
 
     base_url = data['url'].rsplit('/', 1)[0]
+
+    import xbmcaddon
+    try:  # Kodi >= 19
+        from xbmcvfs import translatePath  # pylint: disable=ungrouped-imports
+    except ImportError:  # Kodi 18
+        from xbmc import translatePath  # pylint: disable=ungrouped-imports
+    addon_path = xbmcaddon.Addon().getAddonInfo('profile')
+    output_folder = translatePath(addon_path) + os.sep + 'subtitles' + os.sep
+    if not os.path.exists(os.path.dirname(output_folder)):
+        os.makedirs(os.path.dirname(output_folder))
+    log.debug("**** addon_path: {} output_folder: {}".format(addon_path, output_folder))
     from ttml2ssa import Ttml2SsaAddon
     ttml = Ttml2SsaAddon()
+
     for row in data.get('textTracks', []):
         if 'url' not in row:
             if row['type'].lower() == 'closedcaptions':
@@ -621,7 +633,7 @@ def play(slug, **kwargs):
             #ttml.parse_vtt_from_string(r.content.decode('utf-8'))
             ttml.parse_ttml_from_string(r.content)
             result = ttml.generate_ssa()
-            filename = '/tmp/{}{}{}.ssa'.format(lang, ' [CC]' if impaired=='true' else '', '.forced' if forced=='true'  else '')
+            filename = output_folder + '{}{}{}.ssa'.format(lang, ' [CC]' if impaired=='true' else '', '.forced' if forced=='true'  else '')
             ttml.write2file(filename)
             row['url'] = filename
             
