@@ -610,6 +610,7 @@ def play(slug, **kwargs):
         log.debug("**** addon_path: {} output_folder: {}".format(addon_path, output_folder))
         from ttml2ssa import Ttml2SsaAddon
         ttml = Ttml2SsaAddon()
+        subtype = ttml.subtitle_type()
 
     for row in data.get('textTracks', []):
         log.debug("**** row: {}".format(row))
@@ -637,12 +638,20 @@ def play(slug, **kwargs):
                 ttml.parse_vtt_from_string(r.content.decode('utf-8'))
             else:
                 ttml.parse_ttml_from_string(r.content)
-            result = ttml.generate_ssa()
-            filename = output_folder + '{}{}{}.ssa'.format(lang, ' [CC]' if impaired=='true' else '', '.forced' if forced=='true'  else '')
-            ttml.write2file(filename)
-            row['url'] = filename
+            filename = output_folder + '{}{}{}'.format(lang, ' [CC]' if impaired=='true' else '', '.forced' if forced=='true'  else '')
 
-        item.subtitles.append({'url': row['url'], 'language': row['language'], 'forced': _type == 'forced', 'impaired': _type == 'sdh'})
+            if subtype != 'srt':
+                filename_ssa = filename + '.ssa'
+                ttml.write2file(filename_ssa)
+                item.subtitles.append({'url': filename_ssa, 'language': lang, 'forced': forced, 'impaired': impaired})
+            if subtype != 'ssa':
+                filename_srt = filename
+                if (subtype == 'both'): filename_srt += '.SRT'
+                filename_srt += '.srt'
+                ttml.write2file(filename_srt)
+                item.subtitles.append({'url': filename_srt, 'language': lang, 'forced': forced, 'impaired': impaired})
+        else:
+            item.subtitles.append({'url': row['url'], 'language': row['language'], 'forced': _type == 'forced', 'impaired': _type == 'sdh'})
 
     if settings.getBool('sync_playback', False):
         item.callback = {
