@@ -607,13 +607,11 @@ def play(slug, **kwargs):
         output_folder = translatePath(addon_path) + os.sep + 'subtitles' + os.sep
         if not os.path.exists(os.path.dirname(output_folder)):
             os.makedirs(os.path.dirname(output_folder))
-        log.debug("**** addon_path: {} output_folder: {}".format(addon_path, output_folder))
         from ttml2ssa import Ttml2SsaAddon
         ttml = Ttml2SsaAddon()
         subtype = ttml.subtitle_type()
 
     for row in data.get('textTracks', []):
-        log.debug("**** row: {}".format(row))
         if row['type'].lower() == 'closedcaptions':
             _type = 'sdh'
         elif row['type'].lower() == 'forced':
@@ -633,7 +631,6 @@ def play(slug, **kwargs):
             impaired = _type == 'sdh'
             ttml.subtitle_language = lang
             url_extension = url.split("/")[-1:][0].split(".")[-1:][0]
-            log.debug("**** url_extension: {}".format(url_extension))
             if url_extension == 'vtt':
                 ttml.parse_vtt_from_string(r.content.decode('utf-8'))
             else:
