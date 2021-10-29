@@ -597,18 +597,19 @@ def play(slug, **kwargs):
 
     base_url = data['url'].rsplit('/', 1)[0]
 
-    import xbmcaddon
-    try:  # Kodi >= 19
-        from xbmcvfs import translatePath  # pylint: disable=ungrouped-imports
-    except ImportError:  # Kodi 18
-        from xbmc import translatePath  # pylint: disable=ungrouped-imports
-    addon_path = xbmcaddon.Addon().getAddonInfo('profile')
-    output_folder = translatePath(addon_path) + os.sep + 'subtitles' + os.sep
-    if not os.path.exists(os.path.dirname(output_folder)):
-        os.makedirs(os.path.dirname(output_folder))
-    log.debug("**** addon_path: {} output_folder: {}".format(addon_path, output_folder))
-    from ttml2ssa import Ttml2SsaAddon
-    ttml = Ttml2SsaAddon()
+    if settings.getBool('use_ttml2ssa', False):
+        import xbmcaddon
+        try:  # Kodi >= 19
+            from xbmcvfs import translatePath  # pylint: disable=ungrouped-imports
+        except ImportError:  # Kodi 18
+            from xbmc import translatePath  # pylint: disable=ungrouped-imports
+        addon_path = xbmcaddon.Addon().getAddonInfo('profile')
+        output_folder = translatePath(addon_path) + os.sep + 'subtitles' + os.sep
+        if not os.path.exists(os.path.dirname(output_folder)):
+            os.makedirs(os.path.dirname(output_folder))
+        log.debug("**** addon_path: {} output_folder: {}".format(addon_path, output_folder))
+        from ttml2ssa import Ttml2SsaAddon
+        ttml = Ttml2SsaAddon()
 
     for row in data.get('textTracks', []):
         log.debug("**** row: {}".format(row))
@@ -622,25 +623,24 @@ def play(slug, **kwargs):
         row['url'] = '{base_url}/t/sub/{language}_{type}.vtt'.format(base_url=base_url, language=row['language'], type=_type)
         log.debug('Generated subtitle url: {}'.format(row['url']))
 
-        
-        import requests
-        url = row['url']
-        r = requests.get(url, allow_redirects=True)
-        lang = row['language']
-        forced = _type == 'forced'
-        impaired = _type == 'sdh'
-        ttml.subtitle_language = lang
-        url_extension = url.split("/")[-1:][0].split(".")[-1:][0]
-        log.debug("**** url_extension: {}".format(url_extension))
-        if url_extension == 'vtt':
-            ttml.parse_vtt_from_string(r.content.decode('utf-8'))
-        else:
-            ttml.parse_ttml_from_string(r.content)
-        result = ttml.generate_ssa()
-        filename = output_folder + '{}{}{}.ssa'.format(lang, ' [CC]' if impaired=='true' else '', '.forced' if forced=='true'  else '')
-        ttml.write2file(filename)
-        row['url'] = filename
-        
+        if settings.getBool('use_ttml2ssa', False):
+            import requests
+            url = row['url']
+            r = requests.get(url, allow_redirects=True)
+            lang = row['language']
+            forced = _type == 'forced'
+            impaired = _type == 'sdh'
+            ttml.subtitle_language = lang
+            url_extension = url.split("/")[-1:][0].split(".")[-1:][0]
+            log.debug("**** url_extension: {}".format(url_extension))
+            if url_extension == 'vtt':
+                ttml.parse_vtt_from_string(r.content.decode('utf-8'))
+            else:
+                ttml.parse_ttml_from_string(r.content)
+            result = ttml.generate_ssa()
+            filename = output_folder + '{}{}{}.ssa'.format(lang, ' [CC]' if impaired=='true' else '', '.forced' if forced=='true'  else '')
+            ttml.write2file(filename)
+            row['url'] = filename
 
         item.subtitles.append({'url': row['url'], 'language': row['language'], 'forced': _type == 'forced', 'impaired': _type == 'sdh'})
 
