@@ -611,6 +611,7 @@ def play(slug, **kwargs):
     ttml = Ttml2SsaAddon()
 
     for row in data.get('textTracks', []):
+        log.debug("**** row: {}".format(row))
         if row['type'].lower() == 'closedcaptions':
             _type = 'sdh'
         elif row['type'].lower() == 'forced':
@@ -629,8 +630,12 @@ def play(slug, **kwargs):
         forced = _type == 'forced'
         impaired = _type == 'sdh'
         ttml.subtitle_language = lang
-        #ttml.parse_vtt_from_string(r.content.decode('utf-8'))
-        ttml.parse_ttml_from_string(r.content)
+        url_extension = url.split("/")[-1:][0].split(".")[-1:][0]
+        log.debug("**** url_extension: {}".format(url_extension))
+        if url_extension == 'vtt':
+            ttml.parse_vtt_from_string(r.content.decode('utf-8'))
+        else:
+            ttml.parse_ttml_from_string(r.content)
         result = ttml.generate_ssa()
         filename = output_folder + '{}{}{}.ssa'.format(lang, ' [CC]' if impaired=='true' else '', '.forced' if forced=='true'  else '')
         ttml.write2file(filename)
