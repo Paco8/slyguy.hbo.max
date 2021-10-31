@@ -635,7 +635,7 @@ def play(slug, **kwargs):
                 ttml.parse_vtt_from_string(r.content.decode('utf-8'))
             else:
                 ttml.parse_ttml_from_string(r.content)
-            filename = output_folder + '{}{}{}'.format(lang, ' [CC]' if impaired=='true' else '', '.forced' if forced=='true'  else '')
+            filename = output_folder + '{}{}{}'.format(lang, ' [CC]' if impaired else '', '.forced' if forced else '')
 
             if subtype != 'srt':
                 filename_ssa = filename + '.ssa'
