@@ -535,7 +535,36 @@ def mpd_request(_data, _path, **kwargs):
     enable_ec3 = settings.getBool('ec3_enabled', False)
     enable_atmos = settings.getBool('atmos_enabled', False)
 
+    def fix_sub(adap_set):
+        lang = adap_set.getAttribute('lang')
+        _type = 'sub'
+        for elem in adap_set.getElementsByTagName('Role'):
+            if elem.getAttribute('schemeIdUri') == 'urn:mpeg:dash:role:2011':
+                value = elem.getAttribute('value')
+                if value == 'caption':
+                    _type = 'sdh'
+                elif value == 'forced-subtitle':
+                    _type = 'forced'
+                break
+
+        for repr in adap_set.getElementsByTagName('Representation'):
+            segments = repr.getElementsByTagName('SegmentTemplate')
+            if not segments:
+                continue
+
+            for seg in segments:
+                repr.removeChild(seg)
+
+            elem = root.createElement('BaseURL')
+            elem2 = root.createTextNode('t/sub/{lang}_{type}.vtt'.format(lang=lang, type=_type))
+            elem.appendChild(elem2)
+            repr.appendChild(elem)
+
     for adap_set in root.getElementsByTagName('AdaptationSet'):
+        if adap_set.getAttribute('contentType') == 'text':
+            fix_sub(adap_set)
+            continue
+
         if int(adap_set.getAttribute('maxHeight') or 0) >= 720:
             if is_wv_secure():
                 for elem in adap_set.getElementsByTagName('ContentProtection'):
@@ -626,6 +655,8 @@ def play(slug, **kwargs):
         inputstream = inputstream.MPD(),
     )
 
+    item.proxy_data['middleware'] = {data['url']: {'type': MIDDLEWARE_PLUGIN, 'url': plugin.url_for(mpd_request)}}
+
     if 'defaultAudioSelection' in data:
         item.proxy_data['default_language'] = data['defaultAudioSelection']['language']
 
@@ -634,7 +665,6 @@ def play(slug, **kwargs):
 
     if 'drm' in data:
         item.inputstream = inputstream.Widevine(license_key=data['drm']['licenseUrl'], license_headers=headers)
-        item.proxy_data['middleware'] = {data['url']: {'type': MIDDLEWARE_PLUGIN, 'url': plugin.url_for(mpd_request)}}
     else:
         item.headers = headers
 
@@ -685,7 +715,38 @@ def play(slug, **kwargs):
                     item.play_next['next_file'] = 'urn:hbo:feature:' + slug.split(':')[3]
                     break
 
-    base_url = data['url'].rsplit('/', 1)[0]
+    # for row in data.get('textTracks', []):
+    #     if row['type'].lower() == 'closedcaptions':
+    #         _type = 'sdh'
+    #     elif row['type'].lower() == 'forced':
+    #         _type = 'forced'
+    #     else:
+    #         _type = 'sub'
+
+    #     row['url'] = 't/sub/{language}_{type}.vtt'.format(language=row['language'], type=_type)
+    #     log.debug('Generated subtitle url: {}'.format(row['url']))
+    #     item.subtitles.append({'url': row['url'], 'language': row['language'], 'forced': _type == 'forced', 'impaired': _type == 'sdh', 'mimetype': 'text/vtt'})
+
+    log.debug("**** data: {}".format(data['url']))
+    try:
+        # Python 2
+        import urlparse
+        query_str = urlparse.urlparse(data['url'])
+        query_list = urlparse.parse_qs(query_str.query)
+    except:
+        # Python 3
+        from urllib.parse import urlparse
+        from urllib.parse import parse_qs
+        query_str = urlparse(data['url'])
+        query_list = parse_qs(query_str.query)
+
+    log.debug("**** query_str: {}".format(query_str))
+    log.debug("**** query_list: {}".format(query_list))
+    url = query_list['r.host'][0] + '/' + query_list['r.manifest'][0]
+    log.debug("**** url: {}".format(url))
+    base_url = url.rsplit('/', 1)[0]
+
+    #base_url = data['url'].rsplit('/', 1)[0]
 
     if settings.getBool('use_ttml2ssa', False):
         import xbmcaddon
@@ -739,6 +800,7 @@ def play(slug, **kwargs):
                 item.subtitles.append({'url': filename_srt, 'language': lang, 'forced': forced, 'impaired': impaired})
         else:
             item.subtitles.append({'url': row['url'], 'language': row['language'], 'forced': _type == 'forced', 'impaired': _type == 'sdh'})
+
 
     if settings.getBool('sync_playback', False):
         item.callback = {
