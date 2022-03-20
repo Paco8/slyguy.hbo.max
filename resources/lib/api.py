@@ -10,7 +10,7 @@ from slyguy.log import log
 from slyguy.util import get_system_arch, lang_allowed
 
 from .constants import *
-from .language import Language, _
+from .language import _
 
 class APIError(Error):
     pass
@@ -47,22 +47,19 @@ class API(object):
         config = self._client_config()
 
         if name == 'tokens':
-            try:
-                if config['endpoints']['getTokens']['domain'] == 'userGateway':
-                    return 'https://gateway{userSubdomain}.{domain}.hbo.com'.format(**config['routeKeys']) + config['endpoints']['getTokens']['path']
-            except KeyError:
-                pass
-
-            return 'https://oauth{globalUserSubdomain}.{domain}.hbo.com/auth/tokens'.format(**config['routeKeys'])
+            return 'https://oauth{userSubdomain}.{domain}.hbo.com/auth/tokens'.format(**config['routeKeys'])
 
         elif name == 'gateway':
-            return 'https://gateway.{domain}.hbo.com'.format(**config['routeKeys']) + path
+            return 'https://gateway{userSubdomain}.{domain}.hbo.com'.format(**config['routeKeys']) + path
+
+        elif name == 'sessions':
+            return 'https://sessions{userSubdomain}.{domain}.hbo.com'.format(**config['routeKeys']) + path
 
         elif name == 'comet':
-            return 'https://comet{contentSubdomain}.{domain}.hbo.com'.format(**config['routeKeys']) + path
+            return 'https://comet{userSubdomain}.{domain}.hbo.com'.format(**config['routeKeys']) + path
 
-        elif name == 'markers': #need to confirm with latin
-            return 'https://markers{contentSubdomain}.{domain}.hbo.com'.format(**config['routeKeys']) + path
+        elif name == 'markers':
+            return 'https://markers{userSubdomain}.{domain}.hbo.com'.format(**config['routeKeys']) + path
 
         elif name == 'artist':
             return 'https://artist.{cdnDomain}.hbo.com'.format(**config['routeKeys']) + path
@@ -71,6 +68,9 @@ class API(object):
             return None
 
     def _oauth_token(self, payload, headers=None):
+        self.logged_in = False
+        mem_cache.delete('config')
+
         data = self._session.post(self.url('tokens'), data=payload, headers=headers).json()
         self._check_errors(data)
 
@@ -80,6 +80,8 @@ class API(object):
 
         if 'refresh_token' in data:
             userdata.set('refresh_token', data['refresh_token'])
+
+        mem_cache.delete('config')
 
     def _device_serial(self):
         def _format_id(string):
@@ -91,9 +93,10 @@ class API(object):
                 mac_address = ''
 
             system, arch = get_system_arch()
-            return str(string.format(mac_address=mac_address, system=system).strip())
+            return str(string.format(mac_address=mac_address, system=system, arch=arch).strip())
 
-        return str(uuid.uuid3(uuid.UUID(UUID_NAMESPACE), _format_id(settings.get('device_id'))))
+        _id = _format_id(settings.get('device_id').strip()) or _format_id(DEFAULT_DEVICE_ID)
+        return str(uuid.uuid3(uuid.UUID(UUID_NAMESPACE), _id))
 
     def _guest_login(self):
         serial = self._device_serial()
@@ -117,9 +120,13 @@ class API(object):
         self._set_authentication(data['access_token'])
         return serial
 
-    @mem_cache.cached(60*30)
+    @mem_cache.cached(60*30, key='config')
     def _client_config(self):
-        self._guest_login()
+        if not self.logged_in:
+            log.debug("GUEST CONFIG")
+            self._guest_login()
+        else:
+            log.debug("USER CONFIG")
 
         payload = {
             'contract': 'hadron:1.1.2.0',
@@ -127,12 +134,7 @@ class API(object):
         }
 
         data = self._session.post(CONFIG_URL, json=payload).json()
-        self._set_authentication(userdata.get('access_token'))
-
         self._check_errors(data)
-        if data['features']['currentRegionOutOfFootprint']['enabled']:
-            raise APIError(_.GEO_LOCKED)
-
         return data
 
     def device_code(self):
@@ -162,6 +164,16 @@ class API(object):
 
         self._oauth_token(payload)
         mem_cache.empty()
+
+    def login(self, username, password):
+        payload = {
+            'username': username,
+            'password': password,
+            'grant_type': 'user_name_password',
+            'scope': 'browse video_playback device elevated_account_management',
+        }
+
+        self._oauth_token(payload)
 
     def device_login(self, serial, code):
         payload = {
@@ -240,17 +252,30 @@ class API(object):
         self._refresh_token()
         return self._session.delete(self.url('comet', '/watchlist/{}'.format(slug))).ok
 
-    def markers(self, markers):
+    def marker(self, id):
+        markers = self.markers([id,])
+        return list(markers.values())[0] if markers else None
+
+    def markers(self, ids):
+        if not ids:
+            return {}
+
         self._refresh_token()
+        if len(ids) == 1:
+            #always have at least 2 markers so api returns a list
+            ids.append(ids[0])
 
         params = {
-            'limit': len(markers),
+            'limit': len(ids),
         }
 
         try:
-            return self._session.get(self.url('markers', '/markers/{}'.format(','.join(markers))), params=params, json={}).json()
+            markers = {}
+            for row in self._session.get(self.url('markers', '/markers/{}'.format(','.join(ids))), params=params, json={}).json():
+                markers[row['id']] = {'position': row['position'], 'runtime': row['runtime']}
+            return markers
         except:
-            return None
+            return {}
 
     def update_marker(self, url, cut_id, runtime, playback_time):
         self._refresh_token()
@@ -270,16 +295,6 @@ class API(object):
         else:
             return resp.json().get('status') == 'Accepted'
 
-    @mem_cache.cached(60*30)
-    def _flighted_features(self):
-        headers = {
-            'x-hbo-headwaiter': self._headwaiter(),
-        }
-
-        data = self._session.get(self.url('comet', '/flighted-features'), headers=headers).json()
-        self._check_errors(data)
-        return data
-
     def _headwaiter(self):
         config = self._client_config()
 
@@ -290,7 +305,10 @@ class API(object):
         return headwaiter.rstrip(',')
 
     def get_languages(self):
-        return [x for x in self._session.get(self.url('gateway', '/sessions/v1/enabledLanguages')).json() if x.get('disabledForCurrentRegion') != True]
+        headers = {
+            'x-hbo-headwaiter': self._headwaiter(),
+        }
+        return [x for x in self._session.get(self.url('sessions', '/sessions/v1/enabledLanguages'), headers=headers).json() if x.get('disabledForCurrentRegion') != True]
 
     @mem_cache.cached(60*30, key='language')
     def _get_language(self):
@@ -309,6 +327,9 @@ class API(object):
         log.debug('Using default language: {}'.format(DEFAULT_LANGUAGE))
         return DEFAULT_LANGUAGE
 
+    def entitlements(self):
+        return self.content([{"id":"urn:hbo:entitlement-status:mine"}])['urn:hbo:entitlement-status:mine']
+
     def express_content(self, slug, tab=None):
         self._refresh_token()
 
@@ -320,8 +341,11 @@ class API(object):
             'language': self._get_language(),
         }
 
-        query = self._flighted_features()['express-content']['config']['expressContentParams']
-        data = self._session.get(self.url('comet', '/express-content/{}?{}'.format(slug, query)), params=params, headers=headers).json()
+        entitlements = self.entitlements()
+        if entitlements['outOfTerritory']:
+            raise APIError(_.GEO_LOCKED)
+
+        data = self._session.get(self.url('comet', '/express-content/{}?{}'.format(slug, entitlements['expressContentParams'])), params=params, headers=headers).json()
         self._check_errors(data)
 
         _data = {}
