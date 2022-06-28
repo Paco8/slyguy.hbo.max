@@ -762,6 +762,7 @@ def play(slug, **kwargs):
     base_url = url.rsplit('/', 1)[0]
 
     #base_url = data['url'].rsplit('/', 1)[0]
+    stub = 'sub'
 
     if settings.getBool('use_ttml2ssa', False):
         import xbmcaddon
@@ -777,6 +778,14 @@ def play(slug, **kwargs):
         ttml = Ttml2SsaAddon()
         subtype = ttml.subtitle_type()
 
+        import requests
+        import re
+        r = requests.get(url, allow_redirects=True)
+        search = re.search(r'media="t\/(.*?)\/', r.content, flags=re.DOTALL)
+        if None is not search:
+            stub = search.group(1)
+            log.debug('**** stub: {}'.format(stub))
+
     for row in data.get('textTracks', []):
         if row['type'].lower() == 'closedcaptions':
             _type = 'sdh'
@@ -785,7 +794,7 @@ def play(slug, **kwargs):
         else:
             _type = 'sub'
 
-        row['url'] = '{base_url}/t/sub/{language}_{type}.vtt'.format(base_url=base_url, language=row['language'], type=_type)
+        row['url'] = '{base_url}/t/{stub}/{language}_{type}.vtt'.format(base_url=base_url, stub=stub, language=row['language'], type=_type)
         log.debug('Generated subtitle url: {}'.format(row['url']))
 
         if settings.getBool('use_ttml2ssa', False):
@@ -813,8 +822,8 @@ def play(slug, **kwargs):
                 filename_srt += '.srt'
                 ttml.write2file(filename_srt)
                 item.subtitles.append({'url': filename_srt, 'language': lang, 'forced': forced, 'impaired': impaired})
-        else:
-            item.subtitles.append({'url': row['url'], 'language': row['language'], 'forced': _type == 'forced', 'impaired': _type == 'sdh'})
+        #else:
+        #    item.subtitles.append({'url': row['url'], 'language': row['language'], 'forced': _type == 'forced', 'impaired': _type == 'sdh'})
 
 
     if settings.getBool('sync_playback', False):
