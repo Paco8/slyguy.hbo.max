@@ -781,7 +781,7 @@ def play(slug, **kwargs):
         import requests
         import re
         r = requests.get(url, allow_redirects=True)
-        search = re.search(r'media="t\/(.*?)\/', r.content, flags=re.DOTALL)
+        search = re.search(r'media="t\/(.*?)\/t', r.content, flags=re.DOTALL)
         if None is not search:
             stub = search.group(1)
             log.debug('**** stub: {}'.format(stub))
