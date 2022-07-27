@@ -784,7 +784,11 @@ def play(slug, **kwargs):
         search = re.search(r'media="t\/(.*?)\/t', r.content)
         if None is not search:
             stub = search.group(1)
-            log.debug('**** stub: {}'.format(stub))
+        else:
+            search = re.search(r'<BaseURL>t\/(.*?)\/t(.*?)vtt<\/BaseURL>', r.content)
+            if None is not search:
+                stub = search.group(1)
+        log.debug('**** stub: {}'.format(stub))
 
     for row in data.get('textTracks', []):
         if row['type'].lower() == 'closedcaptions':
