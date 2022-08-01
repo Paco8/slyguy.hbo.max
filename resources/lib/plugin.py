@@ -781,11 +781,12 @@ def play(slug, **kwargs):
         import requests
         import re
         r = requests.get(url, allow_redirects=True)
-        search = re.search(r'media="t\/(.*?)\/t', r.content)
+        content = r.content.decode('utf-8')
+        search = re.search(r'media="t\/(.*?)\/t', content)
         if None is not search:
             stub = search.group(1)
         else:
-            search = re.search(r'<BaseURL>t\/(.*?)\/t(.*?)vtt<\/BaseURL>', r.content)
+            search = re.search(r'<BaseURL>t\/(.*?)\/t(.*?)vtt<\/BaseURL>', content)
             if None is not search:
                 stub = search.group(1)
         log.debug('**** stub: {}'.format(stub))
